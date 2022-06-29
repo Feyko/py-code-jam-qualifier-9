@@ -1,3 +1,4 @@
+import logging
 import typing
 from dataclasses import dataclass
 
@@ -31,4 +32,25 @@ class RestaurantManager:
             Request object containing information about the sent
             request to your application.
         """
-        ...
+        match request.scope.get("type"):
+            case "staff.onduty":
+                self.staff[request.scope.get("id")] = request
+            case "staff.offduty":
+                del self.staff[request.scope.get("id")]
+            case "order":
+                cook = find_valid_cook(self.staff, request.scope.get("speciality"))
+                if cook is None:
+                    logging.fatal(f"No valid cook found for speciality {request.scope.get('speciality')}")
+                order = await request.receive()
+                await cook.send(order)
+                result = await cook.receive()
+                await request.send(result)
+            case _:
+                logging.fatal(f"Unknown request type {request.scope.get('type')}")
+
+
+def find_valid_cook(staff: dict, speciality: str) -> Request | None:
+    for v in staff.values():
+        if speciality in v.scope.get("speciality"):
+            return v
+    return None
